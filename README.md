@@ -30,6 +30,8 @@ references/
   05-greybox.md                白膜运镜视频
   06-video-prompt.md           七段式提示词 + 模型常见错误对照表 + 提交包
   07-review-repair.md          收片检查，剪 → 修 → 重拍
+  camera-blocking.md           机位与轴线：180° 规则、合理越轴、两人对话九机位、机位平面图
+  img/two-person-dialogue.png  九机位示意图（由 templates/ 渲染）
   08-post.md                   后期与交付
   review-briefs.md             四个审核 agent 的任务书
   four-thread.md               可选：四线程协作
@@ -39,6 +41,9 @@ scripts/
   pack.py                      校验素材 + 生成按上传顺序编号的提交包
   frames.py                    首尾帧叠图、黑白检查、手机尺寸预览、构图线、裁切
   clip.py                      收片检查：联系表、首尾帧相似度、亮度 / 饱和度漂移、抽帧
+  floorplan.py                 俯视机位平面图 + 画面左右表 + 越轴 / 左右对调检查
+templates/
+  two-person-dialogue.json     两人对话九机位的机位图模板
 ```
 
 ## 致谢
