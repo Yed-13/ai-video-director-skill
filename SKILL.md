@@ -113,4 +113,5 @@ codex exec --skip-git-repo-check -s read-only -i 参考图.png < 提示词.txt
 | 引用写法 | `@图片1`、`@视频1`、`@音频1` | `<Picture 1>`、`<Video 1>`、`<Audio 1>`、`<Subject 1>` |
 | 首尾帧 + 白膜 | 网页端能否同时用，以当前界面为准 | FL2VA 和 Ref2VA 两种模式互斥；首尾帧 + 白膜要用 **Ref2VA**，把图片写成关键帧锚点 |
 | 输出 | 4–15 秒，最高约 720p | 4–15 秒，24fps，本地短边 768，32kHz 立体声 |
+| 部署 | — | 建议在自己电脑上用 ComfyUI（量化权重 + 4 步 LoRA，硬件要求低很多）；本机信息见 `references/backends/minimax-h3-local.md`（如果有） |
 | 写实人脸 | 上传会被拦截 | 有自动审核，可能误判 |
