@@ -12,7 +12,7 @@ codex exec --skip-git-repo-check -s read-only -i 参考图.png < 提示词.txt  
 codex exec --skip-git-repo-check -s workspace-write -C <项目文件夹> < 任务书.txt   # 写代码（白膜等）
 ```
 
-画图提示词第一行写 `Use your image generation tool to create exactly ONE image. Do not run shell commands.`，生成的图在 `~/.codex/generated_images/<日志里的 session id>/`。你自己就是 Codex 时，直接用自己的生图工具。
+画图提示词第一行写 `Use your image generation tool to create exactly ONE image. Do not run shell commands.`，生成的图在 `~/.codex/generated_images/<日志里的 session id>/`。你自己就是 Codex 时，直接用自己的生图工具；用户没有 Codex 时，把出图提示词交给用户用自己的生图工具出图，放回项目文件夹。
 
 ## 总原则
 
