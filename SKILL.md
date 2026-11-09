@@ -51,7 +51,7 @@ codex exec --skip-git-repo-check -s read-only -i 参考图.png < 提示词.txt
 | # | 阶段 | 产出 | 用户关口 | 细节 |
 |---|---|---|---|---|
 | 1 | 故事 | `story.md`：一句话主题 + 逐镜头故事 | 确认故事；新 agent 审故事 | `references/01-story.md` |
-| 2 | 机位、分镜与配色 | 每场戏的机位平面图 `blocking/` + `shotlist.md` + `palette.md` + 色块草图总表 | 确认机位图和分镜 | `references/camera-blocking.md` + `references/02-shotlist.md` |
+| 2 | 机位、分镜与光色 | 每场戏的机位平面图 `blocking/` + `shotlist.md`（含生成段）+ `palette.md`（每场戏的光色表）+ 色彩剧本 + 色块草图总表 | 确认机位图、分镜和光色表 | `references/camera-blocking.md` + `references/02-shotlist.md` + `references/light-color.md` |
 | 3 | 画风与设定图 | `style/` 样帧、`sheets/` 角色和道具设定图 | 确认画风 | `references/03-style-sheets.md` |
 | 4 | 首尾帧 | 每个镜头的 `first.png` / `last.png` | 新 agent 审首尾帧 | `references/04-keyframes.md` |
 | 5 | 白膜运镜视频 | 每个镜头的 `greybox.mp4` | 机位和首帧对齐检查 | `references/05-greybox.md` |
@@ -101,6 +101,7 @@ codex exec --skip-git-repo-check -s read-only -i 参考图.png < 提示词.txt
 | 脚本 | 用途 |
 |---|---|
 | `scripts/floorplan.py` | 根据一场戏的 JSON 画俯视机位平面图（人物、朝向、轴线、每个机位的视角）；列出每个镜头里各人物在画面左 / 中 / 右的位置；检查越轴和左右对调 |
+| `scripts/look.py` | `analyze` 量画面的亮度、反差、黑白位、饱和度、冷暖（等效色温）、绿—洋红色偏和主要颜色；`compare` 以基准帧为准找出颜色不一致的镜头并给出 ffmpeg 校正参数；`swatch` 把色值画成色块条（配色确认、色彩剧本） |
 | `scripts/pack.py` | `build`：校验素材并生成提交包；`limits`：打印各后端的输入限制 |
 | `scripts/frames.py` | `onion` 首尾帧叠图找错位；`gray` 黑白明暗检查；`phone` 缩到手机尺寸检查可读性；`guides` 叠加 38% / 62% 构图线；`crop` 裁成目标画幅 |
 | `scripts/clip.py` | `inspect` 收片检查：基本信息、联系表、首尾帧和关键帧的相似度、逐帧亮度 / 饱和度漂移；`stills` 抽出指定时间的帧 |

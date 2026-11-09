@@ -31,6 +31,7 @@ references/
   06-video-prompt.md           七段式提示词 + 模型常见错误对照表 + 提交包
   07-review-repair.md          收片检查，剪 → 修 → 重拍
   camera-blocking.md           机位与轴线：180° 规则、合理越轴、两人对话九机位、机位平面图
+  light-color.md               光影与色彩：色温、色偏、布光、时间天气、色调与影调、风格配方、光色表、调色
   img/two-person-dialogue.png  九机位示意图（由 templates/ 渲染）
   08-post.md                   后期与交付
   review-briefs.md             四个审核 agent 的任务书
@@ -42,6 +43,7 @@ scripts/
   frames.py                    首尾帧叠图、黑白检查、手机尺寸预览、构图线、裁切
   clip.py                      收片检查：联系表、首尾帧相似度、亮度 / 饱和度漂移、抽帧
   floorplan.py                 俯视机位平面图 + 画面左右表 + 越轴 / 左右对调检查
+  look.py                      画面颜色分析：亮度、反差、冷暖、色偏、主要颜色；跨镜头一致性比较；色块条
 templates/
   two-person-dialogue.json     两人对话九机位的机位图模板
 ```
@@ -51,4 +53,5 @@ templates/
 - 工作流方法：Eian（@EianLu）的文章《Claude code/Codex+Seedance AI视频：从一个想法到成片的全流程》
 - 即梦 Seedance 输入限制与 @ 引用语法：[dexhunter/seedance2-skill](https://github.com/dexhunter/seedance2-skill)（MIT）
 - MiniMax H3 提示词格式：[MiniMax-AI/MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) 中的 `h3-prompt-writing` 指南
+- 短剧写法、切镜规则、资产图规范、声音一致性和光影写法的部分思路：Miller（@TuyetloanP81840）的文章《用 Claude + H3 一个人拍 AI 短剧》
 - 白膜参考视频的思路：本仓库作者
