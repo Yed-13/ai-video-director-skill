@@ -1,8 +1,8 @@
 # AI Video Director
 
-**让 Claude 当你的 AI 短片 / 短剧导演。** 你说出一个想法，Claude 带你走完故事、机位、分镜、画风、首尾帧、白膜运镜、视频提示词、收片检查和后期，最后交付成片。视频由你在即梦 Seedance 或本地 MiniMax H3 上生成后交回。
+**让 Claude 当你的 AI 短片 / 短剧导演。** 你说出一个想法，Claude 带你走完故事、机位、分镜、画风、首尾帧、白膜运镜、视频提示词、收片检查和后期，最后交付成片。视频可以在即梦网页端手动生成，可以由 Claude 通过火山方舟 API 提交 Seedance，也可以用本地部署的 MiniMax H3。
 
-*A Claude Code skill that directs AI short films end to end: story → blocking → keyframes → greybox camera reference → prompts for Jimeng Seedance / MiniMax H3 → QC → ffmpeg post. Docs are in Chinese.*
+*A Claude Code skill that directs AI short films end to end: story → blocking → keyframes → greybox camera reference → prompts for Seedance (Jimeng web or Volcengine Ark API) / MiniMax H3 → QC → ffmpeg post. Docs are in Chinese.*
 
 这是一个 [Claude Code](https://claude.com/claude-code) skill：一套分阶段的工作流说明，加上 5 个小脚本。不需要写代码，全程和 Claude 对话即可。
 
@@ -13,25 +13,35 @@
 ## 它是怎么工作的
 
 ```mermaid
-flowchart LR
-    A[想法] --> B[故事<br/>新 agent 审]
-    B --> C[机位图 · 分镜<br/>光色表]
-    C --> D[画风 · 设定图<br/>身份板 · 场景图]
-    D --> E[首尾帧<br/>新 agent 审]
-    E --> F[白膜运镜视频]
-    F --> G[提示词 + 提交包<br/>提交前审核]
-    G --> H((你在即梦 / H3<br/>上生成))
-    H --> I[收片检查<br/>剪 · 修 · 补 · 重拍]
-    I --> J[后期 · 调色 · 字幕<br/>全片复核]
-    J --> K[成片]
+flowchart TB
+    subgraph S1["① 前期 · 只花文字和图片的钱"]
+        direction LR
+        A[想法] --> B[故事] --> C[机位图<br/>分镜 · 光色表] --> D[画风<br/>身份板 · 场景图]
+    end
+    subgraph S2["② 每一段 · 送去生成前都先审核"]
+        direction LR
+        E[首尾帧] --> F[白膜运镜] --> G[提示词<br/>提交包]
+    end
+    subgraph S3["③ 生成 · 三种方式任选"]
+        direction LR
+        V1[即梦网页端<br/>你手动生成]
+        V2[火山方舟 API<br/>Claude 提交]
+        V3[本地 MiniMax H3<br/>ComfyUI]
+        V1 ~~~ V2 ~~~ V3
+    end
+    subgraph S4["④ 收尾"]
+        direction LR
+        I[收片检查<br/>剪 · 修 · 补 · 重拍] --> J[后期<br/>调色 · 声音 · 字幕] --> K[成片]
+    end
+    S1 --> S2 --> S3 --> S4
 ```
 
 | 谁 | 做什么 |
 |---|---|
-| **你** | 定方向，确认故事、画风和光色，点"生成"，把视频交回来，看动态、听声音 |
-| **Claude** | 写故事、分镜、光色表和所有提示词；审核每张图、每段视频；用 ffmpeg / Python 做后期 |
+| **你** | 定方向，确认故事、画风和光色；选择生成方式；看动态、听声音 |
+| **Claude** | 写故事、分镜、光色表和所有提示词；审核每张图、每段视频；走方舟 API 时报价并提交；用 ffmpeg / Python 做后期 |
 | **Codex** | 画样帧、角色身份板、场景图、首尾帧；写代码渲染白膜视频 |
-| **视频模型** | 即梦 Seedance 2.x（网页端），或本地部署的 MiniMax H3（ComfyUI） |
+| **视频模型** | Seedance（即梦网页端或火山方舟 API），或本地部署的 MiniMax H3 |
 
 ## 和"直接写提示词抽卡"有什么不同
 
@@ -69,7 +79,7 @@ git -C ~/.claude/skills/ai-video-director pull
 | [Codex CLI](https://github.com/openai/codex) | 画图、写白膜代码 |
 | `ffmpeg` / `ffprobe` | 检查和后期（macOS：`brew install ffmpeg`） |
 | Python 3.9+ | 脚本只用标准库；装了 Pillow 时机位图输出 PNG，否则输出 SVG |
-| 视频模型 | 即梦账号，或本地的 MiniMax H3 |
+| 视频模型（任选） | 即梦账号；或火山方舟账号 + API Key（环境变量 `ARK_API_KEY`）；或本地的 MiniMax H3 |
 
 没有 Codex 也能用：让 Claude 写出图提示词，你用自己习惯的生图工具（即梦、GPT Image、Nano Banana 等）出图，把图片放进项目文件夹，后面的流程不变。
 
@@ -79,20 +89,34 @@ git -C ~/.claude/skills/ai-video-director pull
 
 > 我想做一支 30 秒的 AI 短片：一个老人每天给流浪猫留一碗饭，有一天猫带来了一只小猫……
 
-Claude 会先问片长、画幅、用哪个后端、要不要配乐和字幕、预算，然后从故事开始一步步带你做。
+Claude 会先问片长、画幅、用哪种方式生成视频、要不要配乐和字幕、预算，然后从故事开始一步步带你做。
 
-## 和视频模型怎么交接
+## 三种生成方式
 
-1. 每一段准备好后，Claude 生成一个**提交包**：
+每一段准备好后，Claude 都会先生成一个**提交包**，并让审核 agent 检查一遍：
 
-   ```
-   shots/s03/pack/
-     01_首帧.png  02_尾帧.png  03_参考图-1_身份板.png  04_白膜.mp4
-     prompt.txt   README.txt   ← 上传顺序、该选的参数、要粘贴的提示词
-   ```
+```
+shots/s03/pack/
+  01_首帧.png  02_尾帧.png  03_参考图-1_身份板.png  04_白膜.mp4
+  prompt.txt   README.txt        ← 上传顺序、参数、提示词
+  ark_request.json               ← 只在走方舟 API 时生成
+```
 
-2. 你按 `README.txt` 在即梦或 ComfyUI 里上传、粘贴、生成。
-3. 把结果放回 `shots/s03/takes/s03_take1.mp4`，Claude 抽帧检查，告诉你哪里能剪、能修、要补，还是要重拍。
+接下来三种方式都可以，同一部片子也可以混用：
+
+| | 即梦网页端 | 火山方舟 API | 本地 MiniMax H3 |
+|---|---|---|---|
+| 谁来提交 | 你按 `README.txt` 手动上传、生成 | Claude 上传素材、报价，你同意后由它提交、轮询、下载 | 你（或 Claude）在自己的机器上跑 ComfyUI |
+| 适合 | 想自己看着每次生成、用即梦积分 | 想全程只和 Claude 对话、不手动操作 | 有显卡，想低成本大量抽卡 |
+| 费用 | 即梦积分 | 按秒计费，以控制台为准（mini 版 720p 约 0.5 元/秒） | 电费和时间 |
+| 引用写法 | `@图片1`、`@视频1` | `图片1`、`视频1` | `<Picture 1>`、`<Video 1>`、`<Subject 1>` |
+| 首尾帧 + 白膜 | 全能参考模式 | 全参考模式（首尾帧写进提示词） | Ref2VA（FL2VA 不接收视频） |
+| 输出 | 4–15 秒，约 720p | 4–15 秒，480p / 720p（标准版可到 1080p） | 4–15 秒，24fps，短边 768，立体声 |
+
+- **方舟 API**：素材要先上传到能公网访问的地址（如火山引擎 TOS）。Key 只从环境变量读，不会被打印。每次提交前都会报价，等你同意；欠费就停下，不会替你充值。
+- **本地 H3：建议在自己电脑上用 ComfyUI 部署**。用 int8 / 4bit 量化权重加显存卸载，显卡要求可以降到 3060 一级（系统内存建议 64GB 以上）；再配 4 步加速 LoRA 抽卡，门槛比官方的多卡部署低得多。
+
+生成完的视频放回 `shots/s03/takes/s03_take1.mp4`。Claude 抽帧检查，告诉你哪里能剪、能修、要补，还是要重拍。
 
 ## 脚本
 
@@ -103,25 +127,13 @@ Claude 会先问片长、画幅、用哪个后端、要不要配乐和字幕、�
 | `floorplan.py` | 俯视机位图、画面左右表、越轴和左右对调检查 | `floorplan.py blocking/公园.json` |
 | `look.py` | 量亮度、反差、冷暖、色偏、主要颜色；比较镜头颜色并给校正参数；画色块条 | `look.py compare 基准.png takes/*.mp4` |
 | `frames.py` | 首尾帧叠图找错位、黑白检查、手机尺寸预览、构图线、裁切和推镜裁切 | `frames.py onion first.png last.png` |
-| `pack.py` | 按后端限制校验素材和提示词格式，生成编号提交包 | `pack.py build shots/s03 --backend jimeng --duration 6` |
+| `pack.py` | 按后端限制校验素材和提示词格式，生成编号提交包（方舟另生成请求 JSON 和报价） | `pack.py build shots/s03 --backend jimeng --duration 6` |
 | `clip.py` | 收片检查：联系表、首尾帧相似度、亮度和色温漂移、结尾跳变、抽帧 | `clip.py inspect takes/s03_take1.mp4 --first first.png` |
 
 <p align="center">
   <img src="references/img/palette-example.png" width="480" alt="光色表色块条示例"><br>
   <sub><code>look.py swatch</code> 生成的光色表色块条</sub>
 </p>
-
-## 支持的视频后端
-
-| | 即梦 Seedance 2.x | MiniMax H3（本地） |
-|---|---|---|
-| 怎么跑 | 网页端，手动上传 | ComfyUI（推荐）或 SGLang |
-| 引用写法 | `@图片1`、`@视频1`、`@音频1` | `<Picture 1>`、`<Video 1>`、`<Audio 1>`、`<Subject 1>` |
-| 提示词 | 中文 | 官方结构化格式（英文字段，台词保留原文） |
-| 首尾帧 + 白膜 | 全能参考模式 | Ref2VA（FL2VA 不接收视频） |
-| 输出 | 4–15 秒，最高约 720p | 4–15 秒，24fps，短边 768，立体声 |
-
-**本地跑 H3，建议在自己电脑上用 ComfyUI 部署**：用 int8 / 4bit 量化权重加显存卸载，显卡要求可以降到 3060 一级（系统内存建议 64GB 以上）；再配 4 步加速 LoRA 抽卡，硬件门槛比官方多卡部署低得多。
 
 ## 项目结构
 
@@ -140,7 +152,7 @@ references/                 各阶段说明，进入对应阶段时才读
   08-post.md                  后期、声音、字幕、交付
   review-briefs.md            四份审核任务书
   four-thread.md              可选：四个 agent 协作
-  backends/                   即梦、MiniMax H3
+  backends/                   即梦网页端、火山方舟 API、MiniMax H3
 scripts/                    5 个脚本（只依赖 Python 标准库和 ffmpeg）
 templates/                  机位图模板
 ```

@@ -2,15 +2,17 @@
 """Validate a shot's assets against a video backend and build a numbered submission pack.
 
 Usage:
-  pack.py limits [--backend jimeng|h3-fl2va|h3-ref2va]
+  pack.py limits [--backend jimeng|ark|h3-fl2va|h3-ref2va]
   pack.py build SHOT_DIR --backend jimeng --duration 6 [--ratio 16:9] [--prompt FILE] [--model NAME]
                 [--first first_v2.png] [--last last_v2.png] [--no-first] [--no-greybox] [--force]
+                [--resolution 720p] [--price 0.5]      # ark only: request resolution, yuan per second for the quote
 
 Expected files in SHOT_DIR (defaults):
   first.png  last.png  greybox.mp4  ref_*.{png,jpg,mp4,mp3,wav}
-  prompt_jimeng.txt (jimeng) or prompt_h3.txt (h3-*)
+  prompt_jimeng.txt (jimeng), prompt_ark.txt (ark; falls back to prompt_jimeng.txt), prompt_h3.txt (h3-*)
 """
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -28,6 +30,15 @@ BACKENDS = {
         "duration": (4, 15), "int_duration": False,
         "img_fmt": {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"},
         "prompt": "prompt_jimeng.txt",
+    },
+    "ark": {
+        "label": "Seedance · 火山方舟 API（Claude 提交）",
+        "images": 9, "videos": 3, "audios": 3, "total": 12,
+        "image_mb": 30, "video_mb": 50, "audio_mb": 15,
+        "video_total": (2, 15), "audio_total": 15, "clip_each": None,
+        "duration": (4, 15), "int_duration": True,
+        "img_fmt": {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"},
+        "prompt": "prompt_ark.txt",
     },
     "h3-fl2va": {
         "label": "MiniMax H3 本地 · FL2VA（首尾帧）",
@@ -103,9 +114,14 @@ def collect(shot, args, errors, warns):
     return items
 
 
+ARK_URL = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+
+
 def label_for(backend, kind, idx):
     if backend == "jimeng":
         return {"image": "@图片%d", "video": "@视频%d", "audio": "@音频%d"}[kind] % idx
+    if backend == "ark":
+        return {"image": "图片%d", "video": "视频%d", "audio": "音频%d"}[kind] % idx
     return {"image": "<Picture %d>", "video": "<Video %d>", "audio": "<Audio %d>"}[kind] % idx
 
 
@@ -135,7 +151,7 @@ def check(items, args, cfg, errors, warns):
     if not (lo <= args.duration <= hi):
         errors.append("生成时长 %.2f 秒不在 %d–%d 秒范围内" % (args.duration, lo, hi))
     if cfg["int_duration"] and abs(args.duration - round(args.duration)) > 1e-6:
-        errors.append("H3 的时长必须是整数秒")
+        errors.append("这个后端的时长必须是整数秒")
 
     for role, p, k in items:
         i = info[p]
@@ -200,8 +216,8 @@ def check_prompt(text, items, backend, duration, errors, warns):
     counts = {"image": 0, "video": 0, "audio": 0}
     for _, _, k in items:
         counts[k] += 1
-    if backend == "jimeng":
-        pats = {"image": r"@图片\s*(\d+)", "video": r"@视频\s*(\d+)", "audio": r"@音频\s*(\d+)"}
+    if backend in ("jimeng", "ark"):
+        pats = {"image": r"@?图片\s*(\d+)", "video": r"@?视频\s*(\d+)", "audio": r"@?音频\s*(\d+)"}
     else:
         pats = {"image": r"<Picture (\d+)>|Picture (\d+)", "video": r"<Video (\d+)>", "audio": r"<Audio (\d+)>"}
     for k, pat in pats.items():
@@ -215,6 +231,9 @@ def check_prompt(text, items, backend, duration, errors, warns):
             if i not in used:
                 warns.append("素材 %s 没有在提示词里被引用（每个素材都要写明用途）" % label_for(backend, k, i))
 
+    if backend == "ark" and ark_mode(items) == "reference" and any(r == "首帧" for r, _, _ in items):
+        if "首帧" not in text:
+            warns.append("方舟全参考模式里首尾帧只能靠提示词指定，提示词里要写明“首帧为图片1”“尾帧为图片2”")
     if backend == "h3-fl2va":
         missing = [fld for fld in H3_BASE_FIELDS if fld not in text]
         if missing:
@@ -243,7 +262,60 @@ def check_prompt(text, items, backend, duration, errors, warns):
                 errors.append("镜头切换时间 %s 超出了时长 %.2f 秒" % (m.group(0), duration))
 
 
+def ark_mode(items):
+    """first_last when only keyframes are given; otherwise full reference mode."""
+    if all(r in ("首帧", "尾帧") for r, _, _ in items):
+        return "first_last"
+    return "reference"
+
+
+def ark_request(items, args, text):
+    mode = ark_mode(items)
+    content = [{"type": "text", "text": text or "<粘贴提示词>"}]
+    for i, (role, p, k) in enumerate(items, 1):
+        name = "%02d_%s%s" % (i, role, p.suffix.lower())
+        url = "<上传后可公网访问的 URL：%s>" % name
+        if mode == "first_last":
+            content.append({"type": "image_url", "image_url": {"url": url},
+                            "role": "first_frame" if role == "首帧" else "last_frame"})
+        else:
+            key = {"image": "image_url", "video": "video_url", "audio": "audio_url"}[k]
+            content.append({"type": key, key: {"url": url},
+                            "role": {"image": "reference_image", "video": "reference_video",
+                                     "audio": "reference_audio"}[k]})
+    return {"model": args.model or "<模型 ID，以方舟控制台为准>", "content": content,
+            "ratio": args.ratio, "duration": int(args.duration), "resolution": args.resolution,
+            "generate_audio": True, "watermark": False}
+
+
 def write_readme(pack, items, cfg, args, has_prompt):
+    if args.backend == "ark":
+        mode = ark_mode(items)
+        sec = int(args.duration)
+        lines = ["提交包：%s" % pack.parent.name, "后端：%s" % cfg["label"], "",
+                 "模式：%s" % ("首尾帧（role = first_frame / last_frame）" if mode == "first_last"
+                              else "全参考（首尾帧只能靠提示词指定，不保证和图片完全一致）"),
+                 "预计费用：%d 秒 × %s" % (sec, ("%.2f 元/秒 ≈ %.2f 元" % (args.price, args.price * sec))
+                                        if args.price else "单价（以方舟控制台和账单为准）"),
+                 "",
+                 "1. 把下面的文件上传到可公网访问的地址（如火山引擎 TOS 公共读或临时签名链接），"
+                 "把 URL 填进 ark_request.json 里对应的占位符：",
+                 ]
+        counters = {"image": 0, "video": 0, "audio": 0}
+        for i, (role, p, k) in enumerate(items, 1):
+            counters[k] += 1
+            lines.append("   %02d_%s%s  →  提示词里的%s" % (i, role, p.suffix.lower(), label_for("ark", k, counters[k])))
+        lines += ["2. 把预计费用告诉用户，用户同意后才提交。",
+                  "3. 提交（密钥只从环境变量读，不要打印）：",
+                  "   curl -s %s -H 'Content-Type: application/json' -H \"Authorization: Bearer $ARK_API_KEY\" -d @ark_request.json" % ARK_URL,
+                  "4. 每 15–30 秒查询一次，直到 status 为 succeeded 或 failed：",
+                  "   curl -s %s/<任务 id> -H \"Authorization: Bearer $ARK_API_KEY\"" % ARK_URL,
+                  "5. 成功后下载 content.video_url，保存为 shots/%s/takes/%s_takeK.mp4，并在 log.md 记下任务 id、模型、seed 和费用。" % (
+                      pack.parent.name, pack.parent.name),
+                  "   返回欠费或额度不足就停下，不充值。"]
+        (pack / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return lines
+
     lines = ["提交包：%s" % pack.parent.name, "后端：%s" % cfg["label"], ""]
     if args.backend == "jimeng":
         has_video = any(k == "video" for _, _, k in items)
@@ -294,6 +366,8 @@ def cmd_build(args):
     check(items, args, cfg, errors, warns)
 
     prompt_path = Path(args.prompt) if args.prompt else shot / cfg["prompt"]
+    if args.backend == "ark" and not args.prompt and not prompt_path.exists():
+        prompt_path = shot / "prompt_jimeng.txt"
     if not prompt_path.is_absolute() and args.prompt:
         prompt_path = Path.cwd() / prompt_path
     text = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else None
@@ -322,6 +396,9 @@ def cmd_build(args):
         shutil.copy2(p, pack / ("%02d_%s%s" % (i, role, p.suffix.lower())))
     if text is not None:
         (pack / "prompt.txt").write_text(text, encoding="utf-8")
+    if args.backend == "ark":
+        (pack / "ark_request.json").write_text(
+            json.dumps(ark_request(items, args, text), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lines = write_readme(pack, items, cfg, args, text is not None)
     print("\n✅ 提交包已生成：%s\n" % pack)
     print("\n".join(lines))
@@ -342,7 +419,9 @@ def main():
     b.add_argument("--last", help="尾帧文件名（默认 last.png）")
     b.add_argument("--no-greybox", action="store_true", help="不把 greybox.mp4 放进提交包")
     b.add_argument("--no-first", action="store_true", help="这个镜头确实不用首帧（只给尾帧 / 纯参考图）")
-    b.add_argument("--model", help="写进 README 的模型版本，如即梦的 Seedance 2.0 mini")
+    b.add_argument("--model", help="模型版本：即梦写进 README；方舟写进请求（模型 ID 以控制台为准）")
+    b.add_argument("--resolution", default="720p", help="方舟请求的分辨率（480p / 720p / 1080p）")
+    b.add_argument("--price", type=float, help="方舟单价（元/秒），用于给用户报价")
     b.add_argument("--force", action="store_true", help="有错误也生成")
     args = ap.parse_args()
     {"limits": cmd_limits, "build": cmd_build}[args.cmd](args)

@@ -69,10 +69,10 @@
 ## 提交包
 
 1. 素材放进镜头文件夹：`first.png`、`last.png`、`greybox.mp4`、`ref_*`。参考素材按文件名排序、排在首尾帧之后，用数字前缀控制顺序（`ref_1_羊羊身份板.png`、`ref_2_书院正打.png`、`ref_3_羊羊声音.mp3`），【参考】编号要和 `pack/README.txt` 一致。
-2. 提示词存为 `prompt_jimeng.txt` 或 `prompt_h3.txt`。
+2. 提示词存为 `prompt_jimeng.txt`、`prompt_ark.txt`（方舟；没有时沿用即梦的）或 `prompt_h3.txt`。
 3. `python3 scripts/pack.py build shots/s03 --backend jimeng --duration 6 --model "<模型版本>"`：检查素材和后端限制，生成编号文件和 `README.txt`（上传顺序、参数、提示词）。
 4. 另开子 agent 做提交前审核（`review-briefs.md` 第 3 份），不通过就改了重审。
-5. 告诉用户：包在哪、预计积分或耗时、建议先生成哪几段。
+5. 告诉用户：包在哪、预计积分 / 费用或耗时、建议先生成哪几段。走方舟 API 时，用户同意报价后由你提交（`backends/seedance-ark.md`）。
 
 ## 生成策略（写进给用户的说明）
 
