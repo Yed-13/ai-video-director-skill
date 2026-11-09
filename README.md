@@ -159,4 +159,3 @@ templates/                  机位图模板
 - 短剧写法、切镜规则、资产图规范、声音一致性和光影写法的部分思路：Miller（@TuyetloanP81840）的文章《用 Claude + H3 一个人拍 AI 短剧》
 - 即梦 Seedance 的输入限制和 @ 引用语法：[dexhunter/seedance2-skill](https://github.com/dexhunter/seedance2-skill)（MIT）
 - MiniMax H3 提示词格式：[MiniMax-AI/MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) 的 `h3-prompt-writing` 指南
-- 白膜参考视频的思路：本仓库作者
