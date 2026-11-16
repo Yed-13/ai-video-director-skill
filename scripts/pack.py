@@ -4,6 +4,7 @@
 Usage:
   pack.py limits [--backend jimeng|ark|h3-fl2va|h3-ref2va]
   pack.py build SHOT_DIR --backend jimeng --duration 6 [--ratio 16:9] [--prompt FILE] [--model NAME]
+                         [--seedance 2.0] [--draft] [--takes 3]
                 [--first first_v2.png] [--last last_v2.png] [--no-first] [--no-greybox] [--force]
                 [--resolution 720p] [--price 0.5]      # ark only: request resolution, yuan per second for the quote
 
@@ -57,6 +58,11 @@ BACKENDS = {
         "img_fmt": IMAGE_EXT, "prompt": "prompt_h3.txt",
     },
 }
+
+# Seedance 2.5 limits (BytePlus ModelArk docs, 2026-11); the Jimeng web UI may expose less, so the UI wins.
+SEEDANCE_25 = {"images": 30, "videos": 10, "audios": 10, "total": 50,
+               "video_total": (2, 30), "audio_total": 30, "duration": (4, 30)}
+PROMPT_CHARS = {"jimeng": 15000}
 
 H3_REF_FIELDS = ["subject_definitions:", "summary:", "retention_analysis:", "detailed_description:",
                  "overall_soundscape:", "non_diegetic_music:"]
@@ -283,9 +289,12 @@ def ark_request(items, args, text):
             content.append({"type": key, key: {"url": url},
                             "role": {"image": "reference_image", "video": "reference_video",
                                      "audio": "reference_audio"}[k]})
-    return {"model": args.model or "<模型 ID，以方舟控制台为准>", "content": content,
-            "ratio": args.ratio, "duration": int(args.duration), "resolution": args.resolution,
-            "generate_audio": True, "watermark": False}
+    req = {"model": args.model or "<模型 ID，以方舟控制台为准>", "content": content,
+           "ratio": args.ratio, "duration": int(args.duration), "resolution": args.resolution,
+           "generate_audio": True, "watermark": False}
+    if args.draft:
+        req["draft"] = True
+    return req
 
 
 def write_readme(pack, items, cfg, args, has_prompt):
@@ -306,7 +315,8 @@ def write_readme(pack, items, cfg, args, has_prompt):
             counters[k] += 1
             lines.append("   %02d_%s%s  →  提示词里的%s" % (i, role, p.suffix.lower(), label_for("ark", k, counters[k])))
         lines += ["2. 把预计费用告诉用户，用户同意后才提交。",
-                  "3. 提交（密钥只从环境变量读，不要打印）：",
+                  "3. %s提交（密钥只从环境变量读，不要打印）：" % (
+                      "这是样片请求（draft: true，480p）。选中后升正片的写法见 backends/seedance-ark.md。" if args.draft else ""),
                   "   curl -s %s -H 'Content-Type: application/json' -H \"Authorization: Bearer $ARK_API_KEY\" -d @ark_request.json" % ARK_URL,
                   "4. 每 15–30 秒查询一次，直到 status 为 succeeded 或 failed：",
                   "   curl -s %s/<任务 id> -H \"Authorization: Bearer $ARK_API_KEY\"" % ARK_URL,
@@ -334,6 +344,10 @@ def write_readme(pack, items, cfg, args, has_prompt):
         int(args.duration) if args.duration == int(args.duration) else args.duration, args.ratio,
         "，短边 768，记下 seed" if args.backend.startswith("h3") else "",
         "，模型版本：%s" % args.model if args.model else ""))
+    if args.backend == "jimeng":
+        lines.append("   生成前核对四项：模型、模式、分辨率、时长。%s" % (
+            "这一条是样片：选样片模式（Draft，480p），一次出 %d 条；选中的再点「生成正片」。" % args.takes
+            if args.draft else "正片不要停在默认的 480p。"))
     lines.append("4. %s" % ("把 prompt.txt 的全部内容粘贴进提示词框。" if has_prompt else "（还没有提示词文件！）"))
     lines.append("5. 生成后把视频下载下来，命名为 %s_takeK.mp4，放进 shots/%s/takes/。" % (pack.parent.name, pack.parent.name))
     (pack / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -355,7 +369,13 @@ def cmd_build(args):
     shot = Path(args.shot).resolve()
     if not shot.is_dir():
         sys.exit("找不到镜头文件夹：%s" % shot)
-    cfg = BACKENDS[args.backend]
+    cfg = dict(BACKENDS[args.backend])
+    if args.seedance == "2.5":
+        if args.backend in ("jimeng", "ark"):
+            cfg.update(SEEDANCE_25)
+            cfg["label"] = cfg["label"].replace("2.x", "2.5")
+    if args.draft and args.backend == "ark":
+        args.resolution = "480p"
     errors, warns = [], []
     items = collect(shot, args, errors, warns)
     if not items:
@@ -375,6 +395,9 @@ def cmd_build(args):
         warns.append("没有找到提示词文件 %s，提交包里不会有 prompt.txt" % prompt_path.name)
     else:
         check_prompt(text, items, args.backend, args.duration, errors, warns)
+        limit = PROMPT_CHARS.get(args.backend)
+        if limit and len(text) > limit:
+            errors.append("提示词 %d 字，超过 %d 字上限，粘贴时会被截断" % (len(text), limit))
 
     for w in warns:
         print("⚠️  " + w)
@@ -422,6 +445,10 @@ def main():
     b.add_argument("--model", help="模型版本：即梦写进 README；方舟写进请求（模型 ID 以控制台为准）")
     b.add_argument("--resolution", default="720p", help="方舟请求的分辨率（480p / 720p / 1080p）")
     b.add_argument("--price", type=float, help="方舟单价（元/秒），用于给用户报价")
+    b.add_argument("--seedance", choices=["2.0", "2.5"], default="2.5",
+                   help="jimeng / ark 按哪一代的限制校验，默认 2.5（图 30、视频 10、音频 10、最长 30 秒）；2.0 为 9 / 3 / 3、最长 15 秒")
+    b.add_argument("--draft", action="store_true", help="样片：方舟请求加 draft=true 并固定 480p；即梦在说明里提示选样片模式")
+    b.add_argument("--takes", type=int, default=3, help="样片一次出几条（只写进说明）")
     b.add_argument("--force", action="store_true", help="有错误也生成")
     args = ap.parse_args()
     {"limits": cmd_limits, "build": cmd_build}[args.cmd](args)
