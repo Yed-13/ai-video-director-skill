@@ -41,6 +41,7 @@ ffmpeg -i final.mkv -i mix.wav -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420
 - 全片铺一层统一的环境底噪，把各场的声音粘在一起。
 - 以第一场为基准调色，其余各场向它靠。
 - 时间跳转处用同构图叠化，或用首尾帧另生成的 1–2 秒过渡片。
+- 两段分开生成、要接得看不出来：先设计转场，再用 `scene.py seam` 验收，见 `09-transitions.md`；`xfade` 要求两段帧率、分辨率、像素格式一致。
 - 定格、手绘动画要低帧率的跳动感：`fps=12,fps=24`。
 
 ## 调色

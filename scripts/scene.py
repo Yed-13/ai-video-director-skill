@@ -4,6 +4,7 @@
   scene.py animatic OUT.mp4 IMG:SEC [IMG:SEC ...] [--audio a.wav] [--size 1920x1080]
   scene.py tail CLIP [--seconds 4] [--height 1080] [-o OUT.mp4]
   scene.py cuts CLIP [--threshold 0.3] [--plan 5,10]
+  scene.py seam A.mp4 B.mp4 [--threshold 0.3]
   scene.py voice CLIP [--window 0.1] [--drop 20]
   scene.py spectro CLIP [-o OUT.png] [--top 8000]
   scene.py strip CLIP --crop W:H:X:Y [--every 0.25] [--start S] [--end E] [-o OUT.jpg]
@@ -11,17 +12,20 @@
 animatic  首帧样片：按顺序把静帧各停几秒拼成一条，生成前看叙事和衔接。
 tail      截上一场成片最后几秒，做下一场的 @视频1（接着往下拍）。
 cuts      检测切点，可和计划的切点对比。
-voice     300-3500 Hz 带通后的 RMS 包络，列出有人声的时间段。
+seam      两段接起来后检查接缝：A 尾帧信息量、接缝处场景得分、A 尾帧和 B 首帧的相似度。
+voice    300-3500 Hz 带通后的 RMS 包络，列出有人声的时间段。
 spectro   频谱图：有清楚谐波是正常发声，只有噪声带是耳语或气声。
 strip     裁一块（比如嘴部）按时间排成一行，看不说话的人嘴动没动。
 """
 import argparse
 import re
+import statistics
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _media import ffmpeg, need_ffmpeg, probe, run  # noqa: E402
+from _media import ffmpeg, need_ffmpeg, probe, run, ssim  # noqa: E402
 
 
 def cmd_animatic(a):
@@ -93,6 +97,52 @@ def cmd_cuts(a):
                 print("  计划 %.2f 秒 -> 实际 %.2f 秒（%+.2f）" % (want, near, near - want))
         if len(cuts) != len(plan):
             print("  切点数量和计划不同：计划 %d，实际 %d" % (len(plan), len(cuts)))
+
+
+def cmd_seam(a):
+    """A、B 两段接起来后：A 尾帧信息量、接缝处场景得分、A 尾帧和 B 首帧的相似度。"""
+    ia, ib = probe(a.a), probe(a.b)
+    w, h = ia["width"] // 2 * 2, ia["height"] // 2 * 2
+    with tempfile.TemporaryDirectory(prefix="seam_") as tmp:
+        tmp = Path(tmp)
+        last, first = tmp / "a_last.jpg", tmp / "b_first.jpg"
+        ffmpeg(["-sseof", "-0.2", "-i", a.a, "-vf", "scale=%d:%d" % (w, h), "-update", "1", "-q:v", "3", last])
+        ffmpeg(["-i", a.b, "-vf", "scale=%d:%d" % (w, h), "-frames:v", "1", "-q:v", "3", first])
+        ffmpeg(["-sseof", "-2.5", "-t", "2", "-i", a.a, "-vf", "fps=6,scale=%d:%d" % (w, h),
+                "-q:v", "3", str(tmp / "t_%03d.jpg")])
+        base = sorted((p.stat().st_size for p in tmp.glob("t_*.jpg")))
+        last_kb = last.stat().st_size / 1024
+        s = ssim(last, first, w, h)
+    print("A：%s  %.2f 秒    B：%s  %.2f 秒" % (a.a, ia["duration"], a.b, ib["duration"]))
+    ratio = 1.0
+    if base:
+        med = statistics.median(base) / 1024
+        ratio = last_kb / med if med else 1
+        print("尾帧信息量：A 最后一帧 %.1f KB；A 倒数 2.5–0.5 秒的帧中位数 %.1f KB（比值 %.2f）" % (last_kb, med, ratio))
+        print("  " + ("明显更小：画面接近被盖满或变暗，适合遮挡转场" if ratio < 0.4 else
+                      "没有明显变小：做遮挡转场的话，A 结尾还没被遮挡物盖满"))
+    if s is not None:
+        print("A 尾帧和 B 首帧 SSIM %.3f  " % s + ("接得上" if s >= 0.9 else "差距较大：B 首帧不是 A 的尾帧，或 B 一开始就大幅运动") +
+              ("（尾帧很暗时 SSIM 不可靠，以接缝得分为准）" if ratio < 0.4 else ""))
+    graph = ("[0:v]scale=%d:%d,fps=24,setsar=1[a];[1:v]scale=%d:%d,fps=24,setsar=1[b];"
+             "[a][b]concat=n=2:v=1:a=0,select='gte(scene,0)',metadata=print:key=lavfi.scene_score" % (w, h, w, h))
+    p = run(["ffmpeg", "-hide_banner", "-i", a.a, "-i", a.b, "-filter_complex", graph, "-an", "-f", "null", "-"],
+            check=False)
+    times = [float(m) for m in re.findall(r"pts_time:([\d.]+)", p.stderr)]
+    scores = [float(m) for m in re.findall(r"lavfi\.scene_score=([\d.]+)", p.stderr)]
+    rows = list(zip(times, scores))
+    if not rows:
+        print("没有读到场景得分（ffmpeg 版本不支持 metadata 输出？）")
+        return
+    seam = max((sc for t, sc in rows if abs(t - ia["duration"]) <= 0.1), default=None)
+    near = max((sc for t, sc in rows if 0.1 < abs(t - ia["duration"]) <= 1.0), default=0.0)
+    thr = float(a.threshold)
+    if seam is None:
+        print("没找到接缝处的帧")
+        return
+    print("接缝得分 %.3f（硬切阈值 %s；前后 1 秒内其他帧最高 %.3f）  " % (seam, a.threshold, near) +
+          ("低于硬切阈值：接缝不明显" if seam < thr else "高于硬切阈值：接缝能看出来，检查方向、速度、光色"))
+    print("得分和 SSIM 只是参考，最后抽接缝前后各 3 帧（clip.py stills）和实际播放确认。")
 
 
 def cmd_voice(a):
@@ -172,6 +222,10 @@ def main():
     s.add_argument("clip")
     s.add_argument("--threshold", default="0.3")
     s.add_argument("--plan")
+    s = sub.add_parser("seam")
+    s.add_argument("a")
+    s.add_argument("b")
+    s.add_argument("--threshold", default="0.3")
     s = sub.add_parser("voice")
     s.add_argument("clip")
     s.add_argument("--window", type=float, default=0.1)
@@ -188,7 +242,7 @@ def main():
     s.add_argument("--end", type=float)
     s.add_argument("-o", "--out")
     a = ap.parse_args()
-    {"animatic": cmd_animatic, "tail": cmd_tail, "cuts": cmd_cuts, "voice": cmd_voice,
+    {"animatic": cmd_animatic, "tail": cmd_tail, "cuts": cmd_cuts, "seam": cmd_seam, "voice": cmd_voice,
      "spectro": cmd_spectro, "strip": cmd_strip}[a.cmd](a)
 
 

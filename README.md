@@ -133,7 +133,7 @@ shots/s03/pack/
 | `look.py` | 量亮度、反差、冷暖、色偏、主要颜色；比较镜头颜色并给校正参数；画色块条 | `look.py compare 基准.png takes/*.mp4` |
 | `frames.py` | 首尾帧叠图找错位、黑白检查、手机尺寸预览、构图线、裁切和推镜裁切 | `frames.py onion first.png last.png` |
 | `view_list.py` | 每个机位能看到哪些家具和人、在画面左中右哪里、哪些在画外 | `view_list.py blocking/卧室.json` |
-| `scene.py` | 首帧样片、截上一场结尾做接续、切点检测、人声时间段、频谱图、嘴部裁切条 | `scene.py animatic post/a.mp4 s01/first.png:4 s02/first.png:5` |
+| `scene.py` | 首帧样片、截上一场结尾做接续、切点检测、两段接缝检查、人声时间段、频谱图、嘴部裁切条 | `scene.py animatic post/a.mp4 s01/first.png:4 s02/first.png:5` |
 | `pack.py` | 按后端限制校验素材和提示词格式，生成编号提交包（方舟另生成请求 JSON 和报价；支持 Seedance 2.5 限制和样片模式） | `pack.py build shots/s03 --backend jimeng --duration 6 --draft` |
 | `clip.py` | 收片检查：联系表、首尾帧相似度、亮度和色温漂移、结尾跳变、抽帧 | `clip.py inspect takes/s03_take1.mp4 --first first.png` |
 
@@ -163,6 +163,7 @@ references/                 各阶段说明，进入对应阶段时才读
   gacha.md                    抽卡：样片、选片、升正片、接续
   07-review-repair.md         收片检查与修复
   08-post.md                  后期、声音、字幕、交付
+  09-transitions.md           转场与接缝：遮挡转场、转场类型表、取尾帧、接缝验收
   review-briefs.md            四份审核任务书
   submit-codex.md             交给浏览器 agent 提交的任务书
   four-thread.md              可选：四个 agent 协作

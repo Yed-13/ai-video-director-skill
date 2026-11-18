@@ -70,6 +70,7 @@ codex exec --skip-git-repo-check -s workspace-write -C <项目文件夹> < 任�
 | 6.5 | 抽样片、选片、升正片 | `takes/`、`log.md` 版本表 | `references/gacha.md` |
 | 7 | 收片、检查、修复 | `review/` 报告（剪 / 修 / 补 / 重拍） | `references/07-review-repair.md` |
 | 8 | 后期与交付 | 成片、`lessons.md`（新 agent 看成片） | `references/08-post.md` |
+| 6–8 | 接缝与转场（两段分开生成要接上，或风格要求转场时） | `scene.py seam` 报告 | `references/09-transitions.md` |
 
 6 → 6.5 → 7 按场循环：一场定稿，再做下一场。
 
@@ -104,7 +105,7 @@ codex exec --skip-git-repo-check -s workspace-write -C <项目文件夹> < 任�
 | `view_list.py <场景>.json` | 每个机位能看到哪些家具和人、在画面左中右哪里、哪些在画外 |
 | `look.py analyze / compare / swatch` | 量亮度、反差、冷暖、色偏、主要颜色；镜头间颜色一致性和校正参数；色块条 |
 | `frames.py onion / gray / phone / guides / crop` | 首尾帧叠图、黑白检查、手机尺寸、构图线、裁切 |
-| `scene.py animatic / tail / cuts / voice / spectro / strip` | 首帧样片；截上一场结尾做接续；切点检测；人声时间段；频谱图；嘴部裁切条 |
+| `scene.py animatic / tail / cuts / seam / voice / spectro / strip` | 首帧样片；截上一场结尾做接续；切点检测；两段接缝检查（尾帧信息量、接缝得分、首尾帧相似度）；人声时间段；频谱图；嘴部裁切条 |
 | `pack.py build <镜头> --backend jimeng\|ark\|h3-fl2va\|h3-ref2va --duration N [--seedance 2.0] [--draft]` | 校验素材和提示词长度，生成按上传顺序编号的提交包和操作说明；`ark` 另外生成请求 JSON 和报价 |
 | `clip.py inspect / stills` | 收片检查（联系表、首尾帧相似度、漂移、抽帧）；按时间抽帧 |
 
